@@ -1,0 +1,133 @@
+---
+title: "groupBfinalreport"
+author: "Tatiana Macha"
+date: "12/11/2020"
+output:
+  word_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+* * *
+
+## Dropped variables and outlier detection
+In our data we have dropped id, latitute, and longitude variables because those variable are not useful for our analyze. For example, id was dropped due to it being nothing more than an arbitrary identifier of each property, and not descriptive of price. Also, we have dropped an outlier that have more than $33$ bedrooms and we selected only price that is greatest that $\$645,000$. 
+
+From our later model like linear, logistic, bagging, boosting regression model or other model, we have dropped variables such as "X", "date", "price", and "zipcode". While dropping those variable, we can get a better prediction for dependent variables. 
+
+
+
+## Week 1: Logistic Regression
+As we learned about logistic Regression from $Ch.4$ and $5$, we know that logistic model should be categorical variables while linear model can't be used because variable cannot by entered into the regression equation. 
+In logistic regression, we use the logistic function,
+\[
+p(X)=\frac{e^{\beta_0+\beta_1X}}{1+e^{\beta_0+\beta_1X}}
+\]
+
+For this model we want to predict high_price using bathrooms, waterfront, sqft_living,view,yr_built,bedrooms,floors,grade,yr_renovated, and good_condition.
+```{r}
+data<- read.csv("/Users/tatianalozano/Desktop/clean_dataa.csv")
+```
+Here, we remove X amd date variables. 
+```{r}
+data <- subset(data, select =-c(1,2))
+data["high_price"] <- as.factor(ifelse(data$price >= 645000, "high", "low"))
+```
+
+```{r}
+#Define remaining dummy variables as factors
+data$waterfront <- factor(data$waterfront)
+data$popular <- factor(data$popular)
+data$good_condition <- factor(data$good_condition)
+data$high_grade <- factor(data$high_grade)
+```
+
+```{r}
+set.seed(1)
+train <- sample(1:nrow(data), 0.75*nrow(data))
+test <- -train
+trainingData = data[train,]
+testingData  = data[test,]
+testing <- data$high_price[test] # for misclassification rate calculation
+testing_outcome<-data$log_price[test]
+```
+
+From summary modelfit, we see that sqft_living, yr_built, and grade  have the smallest p-value, $< 2e-16$. This values is not a clear evidence for high_price. 
+```{r}
+set.seed(1)
+modelfit <- glm(high_price~bathrooms+waterfront
+                +sqft_living+view+yr_built+
+                 bedrooms+floors+grade+yr_renovated+good_condition,
+                family = binomial, data = testingData)
+summary(modelfit)
+```
+
+The predict() function can be used to predict the probability of high_price. In order to make prediction we must convert these predicted probabilities into class labels by low or high. 
+ 
+```{r}
+probs <- predict(modelfit, newdata = testingData, type = "response")
+#Table() function is used to produce a confusion matrix in order to determine how many observation were correctly or incorrectly classified. 
+logit_fit.pred <- ifelse(probs > 0.50, "low", "high")
+tab<-table(logit_fit.pred, testing)
+tab
+#misclassification error
+1-sum(diag(tab))/sum(tab)
+```
+
+After running our model, the testing mmisclassicfication error is  $0.1257407$. 
+
+#################################
+
+
+## Week 3: Boosting Regression 
+In week 3, we have use the boosting model, this work as same way as bagging model except that the trees are grown sequentially. In other words, we fit consecutive trees and at every step. Our goal is to solve for net error from the prior tree. 
+In this model we will use the gbm package and we want to predict log_price and the $19$ variables. 
+```{r}
+library(randomForest)
+library(ISLR)
+library(tree)
+library(MASS)
+#install.packages("gbm")
+library(gbm)
+```
+
+
+```{r}
+data<- read.csv("/Users/tatianalozano/Desktop/clean_dataa.csv")
+```
+
+```{r}
+data["high_price"] <- as.factor(ifelse(data$price >= 645000, "high", "low"))
+data$high_grade <- factor(data$high_grade)
+data <- subset(data, select =-c(1,2,3,17))
+```
+
+```{r}
+#Splitting data into training and testing by 75%
+set.seed(1)
+train <- sample(1:nrow(data), 0.75*nrow(data))
+test <- -train
+trainingData = data[train,]
+testingData  = data[test,]
+testing <- data$high_price[test] 
+testing_outcome<-data$log_price[test]
+```
+
+We run gbm() with the option distribution="gaussian" since this is a regression problem. The argument n.trees=$10000$ indicates that we want $10000$ trees, an the option interaction.depth=$14$ limits the depth of each tree.
+```{r}
+set.seed(1)
+##########Boosting MSE#########
+
+boost.data = gbm(log_price~., data=trainingData, distribution="gaussian", n.trees=10000, interaction.depth=14, shrinkage = 0.01)
+boost.data
+summary(boost.data)
+summary(data$log_price)
+predict.boost = predict(boost.data, newdata=testingData, n.trees=10000)
+MSEboost=mean((predict.boost-testing_outcome )^2)
+MSEboost #0.05743822
+```
+After running the model, the test MSE obtained is $0.0574$. 
